@@ -5,6 +5,7 @@ import {
   signUpWithSupabase,
   signOutSupabase,
   isSupabaseConfigured,
+  updateSupabaseConfig,
   getCurrentSupabaseUser
 } from './supabase.ts';
 
@@ -88,6 +89,9 @@ export async function checkSupabaseServerConfig(): Promise<{ configured: boolean
     const res = await fetch('/api/config/supabase');
     if (res.ok) {
       const data = await res.json();
+      if (data.supabaseUrl && data.supabaseAnonKey) {
+        updateSupabaseConfig(data.supabaseUrl, data.supabaseAnonKey);
+      }
       return {
         configured: Boolean(data.configured),
         supabaseUrl: data.supabaseUrl || null,

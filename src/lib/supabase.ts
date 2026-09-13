@@ -1,22 +1,40 @@
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
 
-// Read client-side environment variables
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+// Read client-side / defined environment variables (supports SUPABASE_URL and VITE_SUPABASE_URL)
+const readEnv = (key: string): string => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      const val = (import.meta.env as any)[key];
+      if (val && typeof val === 'string' && val.trim()) return val.trim();
+    }
+  } catch {}
+
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      const val = process.env[key];
+      if (val && typeof val === 'string' && val.trim()) return val.trim();
+    }
+  } catch {}
+
+  return '';
+};
+
+let currentUrl = (readEnv('SUPABASE_URL') || readEnv('VITE_SUPABASE_URL') || '').trim();
+let currentAnonKey = (readEnv('SUPABASE_ANON_KEY') || readEnv('VITE_SUPABASE_ANON_KEY') || '').trim();
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
-    supabaseUrl &&
-    supabaseAnonKey &&
-    !supabaseUrl.includes('placeholder') &&
-    supabaseUrl.startsWith('http')
+    currentUrl &&
+    currentAnonKey &&
+    !currentUrl.includes('placeholder') &&
+    currentUrl.startsWith('http')
   );
 };
 
 // Create client with fallback placeholder to avoid runtime module crash
-export const supabase: SupabaseClient = createClient(
-  isSupabaseConfigured() ? supabaseUrl : 'https://placeholder-project.supabase.co',
-  isSupabaseConfigured() ? supabaseAnonKey : 'placeholder-anon-key',
+export let supabase: SupabaseClient = createClient(
+  isSupabaseConfigured() ? currentUrl : 'https://placeholder-project.supabase.co',
+  isSupabaseConfigured() ? currentAnonKey : 'placeholder-anon-key',
   {
     auth: {
       persistSession: true,
@@ -26,6 +44,23 @@ export const supabase: SupabaseClient = createClient(
     },
   }
 );
+
+export function updateSupabaseConfig(url: string, anonKey: string): boolean {
+  if (url && anonKey && url.startsWith('http') && !url.includes('placeholder')) {
+    currentUrl = url.trim();
+    currentAnonKey = anonKey.trim();
+    supabase = createClient(currentUrl, currentAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'supabase_portfolio_auth_token',
+      },
+    });
+    return true;
+  }
+  return false;
+}
 
 // Helper: Translate common Supabase Auth error messages to Indonesian
 export function formatSupabaseAuthError(error: any): string {
@@ -39,7 +74,7 @@ export function formatSupabaseAuthError(error: any): string {
     return 'Email belum dikonfirmasi. Harap periksa kotak masuk email Anda atau matikan "Confirm email" di Supabase Dashboard.';
   }
   if (msg.includes('User already registered')) {
-    return 'Email ini sudah terdaftar di Supabase Auth. Silakan gunakan tab Masuk.';
+    return 'Email ini sudah terdaftar di Supabase Auth.';
   }
   if (msg.includes('Password should be at least')) {
     return 'Kata sandi minimal harus terdiri dari 6 karakter.';
@@ -48,7 +83,7 @@ export function formatSupabaseAuthError(error: any): string {
     return 'Terlalu banyak percobaan. Harap tunggu beberapa saat sebelum mencoba lagi.';
   }
   if (msg.includes('NetworkError') || msg.includes('Failed to fetch')) {
-    return 'Gagal terhubung ke Supabase. Periksa koneksi internet atau validitas VITE_SUPABASE_URL.';
+    return 'Gagal terhubung ke Supabase. Periksa koneksi internet atau validitas SUPABASE_URL.';
   }
 
   return msg;
@@ -64,7 +99,7 @@ export async function signInWithSupabase(email: string, password: string): Promi
   if (!isSupabaseConfigured()) {
     return {
       success: false,
-      message: 'Supabase belum dikonfigurasi. Harap atur VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY di Settings / Environment.',
+      message: 'Supabase belum dikonfigurasi. Harap atur SUPABASE_URL dan SUPABASE_ANON_KEY di environment.',
     };
   }
 
@@ -101,7 +136,7 @@ export async function signInWithSupabase(email: string, password: string): Promi
   }
 }
 
-// Sign up new user in Supabase
+// Sign up new user in Supabase (if needed programmatically)
 export async function signUpWithSupabase(email: string, password: string): Promise<{
   success: boolean;
   user?: User | null;
@@ -112,7 +147,7 @@ export async function signUpWithSupabase(email: string, password: string): Promi
   if (!isSupabaseConfigured()) {
     return {
       success: false,
-      message: 'Supabase belum dikonfigurasi. Harap atur VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY di Settings / Environment.',
+      message: 'Supabase belum dikonfigurasi. Harap atur SUPABASE_URL dan SUPABASE_ANON_KEY di environment.',
     };
   }
 
@@ -129,7 +164,6 @@ export async function signUpWithSupabase(email: string, password: string): Promi
       };
     }
 
-    // If session is null, email confirmation is required
     if (data.user && !data.session) {
       return {
         success: true,
