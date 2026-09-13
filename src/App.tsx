@@ -165,6 +165,13 @@ export default function App() {
     }
   }, [currentPath]);
 
+  // Auto-redirect: If user is already authenticated and lands on /admin/login, send them to dashboard
+  useEffect(() => {
+    if (isAuthenticated() && (currentPath === '/admin/login' || currentPath === '/admin')) {
+      navigateTo('/admin/dashboard');
+    }
+  }, [currentPath, isAuthenticated]);
+
   // --- Handlers for CRUD Operations ---
 
   const handleUpdateProfile = async (updates: Partial<Profile>) => {
