@@ -49,20 +49,36 @@ export default function App() {
   useEffect(() => {
     // 1. Detect route from browser location
     const detectPath = () => {
-      const pathname = window.location.pathname;
-      const hash = window.location.hash.replace('#', '');
+      const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+      const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
       const searchParams = new URLSearchParams(window.location.search);
-      const queryRoute = searchParams.get('route') || searchParams.get('path');
+      const queryRoute = (searchParams.get('route') || searchParams.get('path') || searchParams.get('p') || '').toLowerCase();
+      const hasAdminParam = searchParams.has('admin') || searchParams.get('admin') === 'true' || searchParams.has('login');
 
-      if (hash === '/admin/login' || hash === '/admin/dashboard' || hash === 'admin') {
-        return hash.startsWith('/') ? hash : `/${hash}`;
+      // 1. Check query parameters e.g. ?admin, ?route=/admin/login
+      if (hasAdminParam || queryRoute.includes('admin') || queryRoute.includes('login')) {
+        return '/admin/login';
       }
-      if (queryRoute) {
-        return queryRoute.startsWith('/') ? queryRoute : `/${queryRoute}`;
+      if (queryRoute.includes('dashboard')) {
+        return '/admin/dashboard';
       }
-      if (pathname === '/admin/login' || pathname === '/admin/dashboard') {
-        return pathname;
+
+      // 2. Check hash route e.g. #admin, #/admin, #/admin/login, #login
+      if (rawHash === 'admin' || rawHash === 'admin/login' || rawHash === 'login') {
+        return '/admin/login';
       }
+      if (rawHash === 'admin/dashboard' || rawHash === 'dashboard') {
+        return '/admin/dashboard';
+      }
+
+      // 3. Check browser pathname e.g. /admin, /admin/login, /login
+      if (pathname === '/admin' || pathname === '/admin/login' || pathname === '/login') {
+        return '/admin/login';
+      }
+      if (pathname === '/admin/dashboard') {
+        return '/admin/dashboard';
+      }
+
       return '/';
     };
 
@@ -329,8 +345,11 @@ export default function App() {
             <ContactSection contacts={data.contacts} />
           </main>
 
-          {/* Public Footer - Note: Zero links to admin per PRD Section 5.8 */}
-          <PublicFooter fullName={data.profile.full_name} />
+          {/* Public Footer */}
+          <PublicFooter
+            fullName={data.profile.full_name}
+            onNavigateAdmin={() => navigateTo('/admin/login')}
+          />
         </div>
       )}
     </div>
