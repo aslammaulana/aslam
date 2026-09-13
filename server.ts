@@ -9,6 +9,7 @@ import { initialPortfolioData } from './src/defaultData.ts';
 import { PortfolioData } from './src/types.ts';
 
 dotenv.config();
+dotenv.config({ path: '.env.local', override: true });
 
 const getDirname = () => {
   try {
