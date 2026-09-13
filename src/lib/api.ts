@@ -1,8 +1,16 @@
 import { PortfolioData, Profile, Skill, Project, Experience, Course, Language, Contact } from '../types.ts';
 import { initialPortfolioData } from '../defaultData.ts';
+import {
+  signInWithSupabase,
+  signUpWithSupabase,
+  signOutSupabase,
+  isSupabaseConfigured,
+  getCurrentSupabaseUser
+} from './supabase.ts';
 
 const STORAGE_KEY = 'portfolio_data_cache_v1';
 const AUTH_KEY = 'portfolio_admin_auth_session';
+const USER_KEY = 'portfolio_admin_user_info';
 
 export function getCachedData(): PortfolioData {
   try {
@@ -48,36 +56,89 @@ export function setAdminToken(token: string): void {
   localStorage.setItem(AUTH_KEY, token);
 }
 
+export function getAdminUser(): { email?: string; id?: string } | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setAdminUser(user: { email?: string; id?: string } | null): void {
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(USER_KEY);
+  }
+}
+
 export function clearAdminToken(): void {
   localStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem(USER_KEY);
+  signOutSupabase();
 }
 
 export function isAuthenticated(): boolean {
   return !!getAdminToken();
 }
 
-export async function loginAdmin(email: string, password: string): Promise<{ success: boolean; message?: string }> {
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (res.ok && data.ok) {
-      setAdminToken(data.token);
-      return { success: true };
+export async function loginAdmin(email: string, password: string): Promise<{ success: boolean; message?: string; user?: any }> {
+  // 1. Direct Supabase Authentication
+  if (isSupabaseConfigured()) {
+    const supabaseRes = await signInWithSupabase(email, password);
+    if (supabaseRes.success && supabaseRes.session) {
+      setAdminToken(supabaseRes.session.access_token);
+      setAdminUser({
+        email: supabaseRes.user?.email,
+        id: supabaseRes.user?.id
+      });
+      return {
+        success: true,
+        user: supabaseRes.user
+      };
     }
-    return { success: false, message: data.message || 'Login gagal. Periksa kembali email dan kata sandi.' };
-  } catch (err) {
-    // Client-side fallback authentication if backend is offline
-    if (email === 'admin@portofolio.id' && (password === 'admin123' || password === 'admin_password_123')) {
-      const fallbackToken = 'token_' + Date.now();
-      setAdminToken(fallbackToken);
-      return { success: true };
-    }
-    return { success: false, message: 'Gagal terhubung ke server autentikasi.' };
+    return {
+      success: false,
+      message: supabaseRes.message || 'Autentikasi Supabase gagal. Periksa kembali email dan kata sandi Anda.'
+    };
   }
+
+  // 2. If Supabase is not yet configured in env, notify clearly
+  return {
+    success: false,
+    message: 'Supabase Authentication belum terkonfigurasi. Harap masukkan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY di environment/settings.'
+  };
+}
+
+export async function registerAdmin(email: string, password: string): Promise<{ success: boolean; message?: string; requiresEmailConfirmation?: boolean }> {
+  if (!isSupabaseConfigured()) {
+    return {
+      success: false,
+      message: 'Supabase Authentication belum terkonfigurasi. Harap atur VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.'
+    };
+  }
+
+  const res = await signUpWithSupabase(email, password);
+  if (res.success) {
+    if (res.session) {
+      setAdminToken(res.session.access_token);
+      setAdminUser({
+        email: res.user?.email,
+        id: res.user?.id
+      });
+    }
+    return {
+      success: true,
+      requiresEmailConfirmation: res.requiresEmailConfirmation,
+      message: res.message
+    };
+  }
+
+  return {
+    success: false,
+    message: res.message || 'Pendaftaran akun di Supabase gagal.'
+  };
 }
 
 // Update Profile

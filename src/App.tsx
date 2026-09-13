@@ -5,6 +5,8 @@ import {
   fetchPortfolioData,
   isAuthenticated,
   clearAdminToken,
+  setAdminToken,
+  setAdminUser,
   updateProfile,
   addSkill,
   updateSkill,
@@ -25,6 +27,7 @@ import {
   updateContact,
   deleteContact
 } from './lib/api.ts';
+import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 
 // Public Components
 import { PublicNavbar } from './components/public/PublicNavbar.tsx';
@@ -109,10 +112,30 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
 
+    // 5. Supabase Auth State Change Listener
+    let authSubscription: { unsubscribe: () => void } | null = null;
+    if (isSupabaseConfigured()) {
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          setAdminToken(session.access_token);
+          setAdminUser({
+            email: session.user.email,
+            id: session.user.id
+          });
+        } else if (event === 'SIGNED_OUT') {
+          clearAdminToken();
+        }
+      });
+      authSubscription = authListener.subscription;
+    }
+
     return () => {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', handlePopState);
       window.removeEventListener('keydown', handleKeyDown);
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
     };
   }, []);
 

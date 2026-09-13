@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   Sparkles,
@@ -12,9 +12,11 @@ import {
   Menu,
   X,
   ShieldCheck,
-  Server
+  Server,
+  Database
 } from 'lucide-react';
 import { PortfolioData, Profile, Skill, Project, Experience, Course, Language, Contact } from '../../types.ts';
+import { getAdminUser } from '../../lib/api.ts';
 import { ProfileManager } from './ProfileManager.tsx';
 import { SkillsManager } from './SkillsManager.tsx';
 import { ProjectsManager } from './ProjectsManager.tsx';
@@ -85,6 +87,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('profile');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [adminUser, setAdminUser] = useState<{ email?: string; id?: string } | null>(null);
+
+  useEffect(() => {
+    setAdminUser(getAdminUser());
+  }, []);
 
   const navItems = [
     { key: 'profile' as TabKey, label: 'Profil Utama', icon: User, count: null },
@@ -101,15 +108,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-white border-r border-slate-200 shrink-0">
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
-            P
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-slate-900 leading-tight">Admin Dashboard</h1>
-            <p className="text-xs text-slate-400">Portofolio Pribadi</p>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-slate-900 leading-tight">Admin Dashboard</h1>
+              <p className="text-xs text-slate-400">Portofolio Pribadi</p>
+            </div>
           </div>
         </div>
+
+        {/* Supabase User Info Banner */}
+        {adminUser?.email && (
+          <div className="mx-4 mt-4 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
+            <div className="flex items-center gap-1.5 text-emerald-700 font-semibold mb-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>Supabase User</span>
+            </div>
+            <p className="text-slate-700 font-medium truncate" title={adminUser.email}>
+              {adminUser.email}
+            </p>
+          </div>
+        )}
 
         {/* Navigation Tabs */}
         <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
