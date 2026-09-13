@@ -10,10 +10,16 @@ import { PortfolioData } from './src/types.ts';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const getDirname = () => {
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+};
+const currentDir = getDirname();
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = path.join(currentDir, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'portfolio.json');
 
 // Ensure data folder and file exists

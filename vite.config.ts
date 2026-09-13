@@ -5,8 +5,20 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
-  const supabaseAnonKey = (env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  const supabaseUrl = (
+    env.VITE_SUPABASE_URL ||
+    env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    ''
+  ).trim();
+  const supabaseAnonKey = (
+    env.VITE_SUPABASE_ANON_KEY ||
+    env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    ''
+  ).trim();
 
   return {
     plugins: [react(), tailwindcss()],
@@ -19,6 +31,8 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.SUPABASE_URL': JSON.stringify(supabaseUrl),
       'process.env.SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
       'import.meta.env.SUPABASE_URL': JSON.stringify(supabaseUrl),
       'import.meta.env.SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),

@@ -1,26 +1,57 @@
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
 
-// Read client-side / defined environment variables (supports SUPABASE_URL and VITE_SUPABASE_URL)
-const readEnv = (key: string): string => {
+const STORAGE_SUPABASE_URL = 'portfolio_supabase_url';
+const STORAGE_SUPABASE_KEY = 'portfolio_supabase_anon_key';
+
+// Static member expressions so Vite and esbuild can replace them at build time
+const getInitialUrl = (): string => {
+  let url = '';
   try {
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      const val = (import.meta.env as any)[key];
-      if (val && typeof val === 'string' && val.trim()) return val.trim();
-    }
+    url = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL || '') as string;
   } catch {}
 
-  try {
-    if (typeof process !== 'undefined' && process.env) {
-      const val = process.env[key];
-      if (val && typeof val === 'string' && val.trim()) return val.trim();
-    }
-  } catch {}
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    try {
+      if (typeof process !== 'undefined' && process.env) {
+        url = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '') as string;
+      }
+    } catch {}
+  }
 
-  return '';
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    try {
+      url = localStorage.getItem(STORAGE_SUPABASE_URL) || '';
+    } catch {}
+  }
+
+  return (url || '').trim();
 };
 
-let currentUrl = (readEnv('SUPABASE_URL') || readEnv('VITE_SUPABASE_URL') || '').trim();
-let currentAnonKey = (readEnv('SUPABASE_ANON_KEY') || readEnv('VITE_SUPABASE_ANON_KEY') || '').trim();
+const getInitialAnonKey = (): string => {
+  let key = '';
+  try {
+    key = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '') as string;
+  } catch {}
+
+  if (!key || typeof key !== 'string' || !key.trim()) {
+    try {
+      if (typeof process !== 'undefined' && process.env) {
+        key = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '') as string;
+      }
+    } catch {}
+  }
+
+  if (!key || typeof key !== 'string' || !key.trim()) {
+    try {
+      key = localStorage.getItem(STORAGE_SUPABASE_KEY) || '';
+    } catch {}
+  }
+
+  return (key || '').trim();
+};
+
+let currentUrl = getInitialUrl();
+let currentAnonKey = getInitialAnonKey();
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
@@ -29,6 +60,13 @@ export const isSupabaseConfigured = (): boolean => {
     !currentUrl.includes('placeholder') &&
     currentUrl.startsWith('http')
   );
+};
+
+export const getSupabaseConfig = (): { url: string; isConfigured: boolean } => {
+  return {
+    url: currentUrl || '',
+    isConfigured: isSupabaseConfigured()
+  };
 };
 
 // Create client with fallback placeholder to avoid runtime module crash
@@ -49,6 +87,10 @@ export function updateSupabaseConfig(url: string, anonKey: string): boolean {
   if (url && anonKey && url.startsWith('http') && !url.includes('placeholder')) {
     currentUrl = url.trim();
     currentAnonKey = anonKey.trim();
+    try {
+      localStorage.setItem(STORAGE_SUPABASE_URL, currentUrl);
+      localStorage.setItem(STORAGE_SUPABASE_KEY, currentAnonKey);
+    } catch {}
     supabase = createClient(currentUrl, currentAnonKey, {
       auth: {
         persistSession: true,
@@ -67,14 +109,17 @@ export function formatSupabaseAuthError(error: any): string {
   if (!error) return 'Terjadi kesalahan autentikasi.';
   const msg = error.message || String(error);
 
-  if (msg.includes('Invalid login credentials')) {
-    return 'Email atau kata sandi tidak valid. Pastikan akun telah dibuat di Supabase Auth.';
+  if (msg.includes('Invalid login credentials') || msg.includes('invalid_grant')) {
+    return 'Email atau kata sandi tidak valid. Pastikan akun telah dibuat dan password cocok di Supabase Auth.';
   }
   if (msg.includes('Email not confirmed')) {
-    return 'Email belum dikonfirmasi. Harap periksa kotak masuk email Anda atau matikan "Confirm email" di Supabase Dashboard.';
+    return 'Email belum dikonfirmasi di Supabase. Buka Supabase Dashboard > Authentication > Providers > Email, lalu matikan opsi "Confirm email" (atau periksa inbox email Anda untuk konfirmasi).';
   }
   if (msg.includes('User already registered')) {
     return 'Email ini sudah terdaftar di Supabase Auth.';
+  }
+  if (msg.includes('User not found')) {
+    return 'Pengguna dengan email ini tidak ditemukan di Supabase Auth.';
   }
   if (msg.includes('Password should be at least')) {
     return 'Kata sandi minimal harus terdiri dari 6 karakter.';
@@ -83,7 +128,7 @@ export function formatSupabaseAuthError(error: any): string {
     return 'Terlalu banyak percobaan. Harap tunggu beberapa saat sebelum mencoba lagi.';
   }
   if (msg.includes('NetworkError') || msg.includes('Failed to fetch')) {
-    return 'Gagal terhubung ke Supabase. Periksa koneksi internet atau validitas SUPABASE_URL.';
+    return 'Gagal terhubung ke Supabase. Periksa koneksi internet atau periksa kembali kebenaran SUPABASE_URL.';
   }
 
   return msg;

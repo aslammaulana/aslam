@@ -116,11 +116,11 @@ export default function App() {
     let authSubscription: { unsubscribe: () => void } | null = null;
     if (isSupabaseConfigured()) {
       const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' && session) {
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session) {
           setAdminToken(session.access_token);
           setAdminUser({
-            email: session.user.email,
-            id: session.user.id
+            email: session.user?.email,
+            id: session.user?.id
           });
         } else if (event === 'SIGNED_OUT') {
           clearAdminToken();
