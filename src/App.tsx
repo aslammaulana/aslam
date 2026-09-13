@@ -3,6 +3,7 @@ import { initialPortfolioData } from './defaultData.ts';
 import { PortfolioData, Profile, Skill, Project, Experience, Course, Language, Contact } from './types.ts';
 import {
   fetchPortfolioData,
+  getCachedData,
   isAuthenticated,
   clearAdminToken,
   setAdminToken,
@@ -45,7 +46,7 @@ import { AdminLogin } from './components/admin/AdminLogin.tsx';
 import { AdminDashboard } from './components/admin/AdminDashboard.tsx';
 
 export default function App() {
-  const [data, setData] = useState<PortfolioData>(initialPortfolioData);
+  const [data, setData] = useState<PortfolioData>(() => getCachedData());
   const [currentPath, setCurrentPath] = useState<string>('/');
 
   // Initialize Route & Data

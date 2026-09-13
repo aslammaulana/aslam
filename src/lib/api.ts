@@ -36,16 +36,61 @@ export function setCachedData(data: PortfolioData): void {
 
 // Fetch all portfolio data
 export async function fetchPortfolioData(): Promise<PortfolioData> {
+  // 1. Try Supabase database if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const [
+        { data: profiles },
+        { data: skills },
+        { data: projects },
+        { data: experiences },
+        { data: courses },
+        { data: languages },
+        { data: contacts }
+      ] = await Promise.all([
+        supabase.from('profiles').select('*').limit(1),
+        supabase.from('skills').select('*').order('order_index', { ascending: true }),
+        supabase.from('projects').select('*').order('order_index', { ascending: true }),
+        supabase.from('experiences').select('*').order('order_index', { ascending: true }),
+        supabase.from('courses').select('*').order('order_index', { ascending: true }),
+        supabase.from('languages').select('*').order('order_index', { ascending: true }),
+        supabase.from('contacts').select('*').order('order_index', { ascending: true })
+      ]);
+
+      if (profiles && profiles.length > 0) {
+        const cached = getCachedData();
+        const fullData: PortfolioData = {
+          profile: profiles[0] || cached.profile,
+          skills: skills && skills.length > 0 ? skills : cached.skills,
+          projects: projects && projects.length > 0 ? projects : cached.projects,
+          experiences: experiences && experiences.length > 0 ? experiences : cached.experiences,
+          courses: courses && courses.length > 0 ? courses : cached.courses,
+          languages: languages && languages.length > 0 ? languages : cached.languages,
+          contacts: contacts && contacts.length > 0 ? contacts : cached.contacts
+        };
+        setCachedData(fullData);
+        return fullData;
+      }
+    } catch (e) {
+      console.warn('Supabase fetch error, falling back:', e);
+    }
+  }
+
+  // 2. Try server API /api/data (for localhost)
   try {
     const res = await fetch('/api/data');
     if (res.ok) {
-      const data = await res.json();
-      setCachedData(data);
-      return data;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        setCachedData(data);
+        return data;
+      }
     }
   } catch (err) {
     console.warn('Network fetch error, falling back to cache:', err);
   }
+
   return getCachedData();
 }
 
@@ -307,6 +352,31 @@ export async function updateProfile(profile: Partial<Profile>): Promise<Profile>
   const updatedData = { ...current, profile: updatedProfile };
   setCachedData(updatedData);
 
+  // 1. Sync to Supabase if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const payload: any = {
+        full_name: updatedProfile.full_name,
+        tagline: updatedProfile.tagline,
+        short_description: updatedProfile.short_description,
+        status_label: updatedProfile.status_label,
+        avatar_url: updatedProfile.avatar_url,
+        resume_url: updatedProfile.resume_url,
+        updated_at: updatedProfile.updated_at
+      };
+      const { data: existing } = await supabase.from('profiles').select('id').limit(1);
+      if (existing && existing.length > 0) {
+        payload.id = existing[0].id;
+        await supabase.from('profiles').update(payload).eq('id', existing[0].id);
+      } else {
+        await supabase.from('profiles').insert([payload]);
+      }
+    } catch (e) {
+      console.warn('Supabase profile sync error:', e);
+    }
+  }
+
+  // 2. Sync to local server
   try {
     const res = await fetch('/api/profile', {
       method: 'PUT',
@@ -314,8 +384,11 @@ export async function updateProfile(profile: Partial<Profile>): Promise<Profile>
       body: JSON.stringify(profile)
     });
     if (res.ok) {
-      const data = await res.json();
-      return data.profile;
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const data = await res.json();
+        return data.profile;
+      }
     }
   } catch (err) {
     console.warn('Failed to sync profile to server:', err);

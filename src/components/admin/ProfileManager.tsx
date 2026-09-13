@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, CheckCircle2, User, HelpCircle } from 'lucide-react';
 import { Profile } from '../../types.ts';
 import { ImageUploader } from './ImageUploader.tsx';
@@ -12,6 +12,13 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ profile, onSave 
   const [formData, setFormData] = useState<Profile>({ ...profile });
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState(false);
+
+  // Keep formData in sync when profile prop updates from server/storage
+  useEffect(() => {
+    if (profile) {
+      setFormData({ ...profile });
+    }
+  }, [profile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
