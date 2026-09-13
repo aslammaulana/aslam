@@ -407,6 +407,22 @@ export async function addSkill(name: string): Promise<Skill> {
   const updatedData = { ...current, skills: [...current.skills, newSkill] };
   setCachedData(updatedData);
 
+  // Supabase persistence
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase.from('skills').insert({
+        name: newSkill.name,
+        order_index: newSkill.order_index
+      }).select();
+      if (!error && data && data.length) {
+        newSkill.id = data[0].id;
+      }
+    } catch (e) {
+      console.warn('Supabase addSkill error:', e);
+    }
+  }
+
+  // Server fallback
   try {
     const res = await fetch('/api/skills', {
       method: 'POST',
@@ -428,6 +444,16 @@ export async function updateSkill(id: string, name: string): Promise<void> {
   const skills = current.skills.map((s) => (s.id === id ? { ...s, name } : s));
   setCachedData({ ...current, skills });
 
+  // Supabase update
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('skills').update({ name }).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase updateSkill error:', e);
+    }
+  }
+
+  // Server fallback
   try {
     await fetch(`/api/skills/${id}`, {
       method: 'PUT',
@@ -444,6 +470,16 @@ export async function deleteSkill(id: string): Promise<void> {
   const skills = current.skills.filter((s) => s.id !== id);
   setCachedData({ ...current, skills });
 
+  // Supabase delete
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('skills').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Supabase deleteSkill error:', e);
+    }
+  }
+
+  // Server delete fallback
   try {
     await fetch(`/api/skills/${id}`, { method: 'DELETE' });
   } catch (err) {
@@ -461,6 +497,21 @@ export async function addProject(project: Omit<Project, 'id'>): Promise<Project>
   };
   const updatedData = { ...current, projects: [...current.projects, newProject] };
   setCachedData(updatedData);
+
+  // Supabase insert
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase.from('projects').insert({
+        ...project,
+        order_index: newProject.order_index
+      }).select();
+      if (!error && data && data.length) {
+        newProject.id = data[0].id;
+      }
+    } catch (e) {
+      console.warn('Supabase addProject error:', e);
+    }
+  }
 
   try {
     const res = await fetch('/api/projects', {
@@ -483,6 +534,14 @@ export async function updateProject(id: string, updates: Partial<Project>): Prom
   const projects = current.projects.map((p) => (p.id === id ? { ...p, ...updates } : p));
   setCachedData({ ...current, projects });
 
+  // Supabase update
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('projects').update(updates).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase updateProject error:', e);
+    }
+  }
   try {
     await fetch(`/api/projects/${id}`, {
       method: 'PUT',
@@ -498,7 +557,13 @@ export async function deleteProject(id: string): Promise<void> {
   const current = getCachedData();
   const projects = current.projects.filter((p) => p.id !== id);
   setCachedData({ ...current, projects });
-
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('projects').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Supabase deleteProject error:', e);
+    }
+  }
   try {
     await fetch(`/api/projects/${id}`, { method: 'DELETE' });
   } catch (err) {
@@ -516,6 +581,20 @@ export async function addExperience(exp: Omit<Experience, 'id'>): Promise<Experi
   };
   setCachedData({ ...current, experiences: [...current.experiences, newExp] });
 
+  // Supabase insert
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase.from('experiences').insert({
+        ...exp,
+        order_index: newExp.order_index
+      }).select();
+      if (!error && data && data.length) {
+        newExp.id = data[0].id;
+      }
+    } catch (e) {
+      console.warn('Supabase addExperience error:', e);
+    }
+  }
   try {
     const res = await fetch('/api/experiences', {
       method: 'POST',
@@ -537,6 +616,15 @@ export async function updateExperience(id: string, updates: Partial<Experience>)
   const experiences = current.experiences.map((e) => (e.id === id ? { ...e, ...updates } : e));
   setCachedData({ ...current, experiences });
 
+  // Supabase update
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('experiences').update(updates).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase updateExperience error:', e);
+    }
+  }
+  // Server update fallback
   try {
     await fetch(`/api/experiences/${id}`, {
       method: 'PUT',
@@ -553,6 +641,15 @@ export async function deleteExperience(id: string): Promise<void> {
   const experiences = current.experiences.filter((e) => e.id !== id);
   setCachedData({ ...current, experiences });
 
+  // Supabase delete
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('experiences').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Supabase deleteExperience error:', e);
+    }
+  }
+  // Server delete fallback
   try {
     await fetch(`/api/experiences/${id}`, { method: 'DELETE' });
   } catch (err) {
@@ -570,6 +667,22 @@ export async function addCourse(course: Omit<Course, 'id'>): Promise<Course> {
   };
   setCachedData({ ...current, courses: [...current.courses, newCourse] });
 
+  // Supabase insert
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase.from('courses').insert({
+        ...course,
+        order_index: newCourse.order_index
+      }).select();
+      if (!error && data && data.length) {
+        newCourse.id = data[0].id;
+      }
+    } catch (e) {
+      console.warn('Supabase addCourse error:', e);
+    }
+  }
+
+  // Server fallback
   try {
     const res = await fetch('/api/courses', {
       method: 'POST',
@@ -591,6 +704,16 @@ export async function updateCourse(id: string, updates: Partial<Course>): Promis
   const courses = current.courses.map((c) => (c.id === id ? { ...c, ...updates } : c));
   setCachedData({ ...current, courses });
 
+  // Supabase update
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('courses').update(updates).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase updateCourse error:', e);
+    }
+  }
+
+  // Server update fallback
   try {
     await fetch(`/api/courses/${id}`, {
       method: 'PUT',
@@ -607,6 +730,16 @@ export async function deleteCourse(id: string): Promise<void> {
   const courses = current.courses.filter((c) => c.id !== id);
   setCachedData({ ...current, courses });
 
+  // Supabase delete
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('courses').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Supabase deleteCourse error:', e);
+    }
+  }
+
+  // Server delete fallback
   try {
     await fetch(`/api/courses/${id}`, { method: 'DELETE' });
   } catch (err) {
@@ -624,6 +757,22 @@ export async function addLanguage(lang: Omit<Language, 'id'>): Promise<Language>
   };
   setCachedData({ ...current, languages: [...current.languages, newLang] });
 
+  // Supabase insert
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase.from('languages').insert({
+        ...lang,
+        order_index: newLang.order_index
+      }).select();
+      if (!error && data && data.length) {
+        newLang.id = data[0].id;
+      }
+    } catch (e) {
+      console.warn('Supabase addLanguage error:', e);
+    }
+  }
+
+  // Server fallback
   try {
     const res = await fetch('/api/languages', {
       method: 'POST',
@@ -645,6 +794,16 @@ export async function updateLanguage(id: string, updates: Partial<Language>): Pr
   const languages = current.languages.map((l) => (l.id === id ? { ...l, ...updates } : l));
   setCachedData({ ...current, languages });
 
+  // Supabase update
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('languages').update(updates).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase updateLanguage error:', e);
+    }
+  }
+
+  // Server update fallback
   try {
     await fetch(`/api/languages/${id}`, {
       method: 'PUT',
@@ -661,6 +820,16 @@ export async function deleteLanguage(id: string): Promise<void> {
   const languages = current.languages.filter((l) => l.id !== id);
   setCachedData({ ...current, languages });
 
+  // Supabase delete
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('languages').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Supabase deleteLanguage error:', e);
+    }
+  }
+
+  // Server delete fallback
   try {
     await fetch(`/api/languages/${id}`, { method: 'DELETE' });
   } catch (err) {
@@ -674,6 +843,16 @@ export async function updateContact(id: string, updates: Partial<Contact>): Prom
   const contacts = current.contacts.map((c) => (c.id === id ? { ...c, ...updates } : c));
   setCachedData({ ...current, contacts });
 
+  // Supabase update
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('contacts').update(updates).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase updateContact error:', e);
+    }
+  }
+
+  // Server update fallback
   try {
     await fetch(`/api/contacts/${id}`, {
       method: 'PUT',
@@ -689,10 +868,27 @@ export async function addContact(contact: Omit<Contact, 'id'>): Promise<Contact>
   const current = getCachedData();
   const newContact: Contact = {
     ...contact,
-    id: 'contact-' + Date.now()
+    id: 'contact-' + Date.now(),
+    order_index: (contact as any).order_index ?? (current.contacts.length + 1)
   };
   setCachedData({ ...current, contacts: [...current.contacts, newContact] });
 
+  // Supabase insert
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase.from('contacts').insert({
+        ...contact,
+        order_index: newContact.order_index
+      }).select();
+      if (!error && data && data.length) {
+        newContact.id = data[0].id;
+      }
+    } catch (e) {
+      console.warn('Supabase addContact error:', e);
+    }
+  }
+
+  // Server fallback
   try {
     const res = await fetch('/api/contacts', {
       method: 'POST',
@@ -714,6 +910,16 @@ export async function deleteContact(id: string): Promise<void> {
   const contacts = current.contacts.filter((c) => c.id !== id);
   setCachedData({ ...current, contacts });
 
+  // Supabase delete
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('contacts').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Supabase deleteContact error:', e);
+    }
+  }
+
+  // Server delete fallback
   try {
     await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
   } catch (err) {

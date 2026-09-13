@@ -64,6 +64,7 @@ export interface Contact {
   type: ContactType;
   value: string;
   label?: string;
+  order_index?: number;
   created_at?: string;
   updated_at?: string;
 }
