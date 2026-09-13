@@ -3,8 +3,12 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 import { initialPortfolioData } from './src/defaultData.ts';
 import { PortfolioData } from './src/types.ts';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +43,31 @@ function saveData(data: PortfolioData): void {
   }
 }
 
+// Server-side Supabase Client Helper
+function getSupabaseServerClient(useServiceRole = false): SupabaseClient | null {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+
+  const key = useServiceRole ? (serviceRoleKey || anonKey) : (anonKey || serviceRoleKey);
+
+  if (!url || !key || !url.startsWith('http')) {
+    return null;
+  }
+
+  try {
+    return createClient(url, key, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+  } catch (err) {
+    console.error('Error creating server Supabase client:', err);
+    return null;
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -47,6 +76,20 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
   // --- API Routes ---
+
+  // Supabase Configuration Status Endpoint
+  app.get('/api/config/supabase', (_req, res) => {
+    const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+    const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+    const hasServiceRole = Boolean((process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim());
+    const isConfigured = Boolean(url && (anonKey || hasServiceRole) && url.startsWith('http'));
+
+    res.json({
+      configured: isConfigured,
+      supabaseUrl: url || null,
+      supabaseAnonKey: anonKey || null
+    });
+  });
 
   // Keep-Alive Endpoint per PRD Section 10.1
   app.get('/api/cron/keepalive', (req, res) => {
@@ -68,27 +111,133 @@ async function startServer() {
     });
   });
 
-  // Auth Login Endpoint
-  app.post('/api/auth/login', (req, res) => {
+  // Supabase Auth Login Endpoint
+  app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@portofolio.id';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    if (!email || !password) {
+      return res.status(400).json({ ok: false, message: 'Email dan kata sandi wajib diisi.' });
+    }
 
-    if (email === adminEmail && (password === adminPassword || password === 'admin_password_123')) {
-      return res.json({
-        ok: true,
-        token: 'portfolio_admin_auth_token_' + Date.now(),
-        user: {
-          email: adminEmail,
-          role: 'authenticated'
-        }
+    const supabase = getSupabaseServerClient(false);
+    if (!supabase) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Supabase belum terkonfigurasi. Pastikan SUPABASE_URL dan SUPABASE_ANON_KEY (atau SUPABASE_SERVICE_ROLE_KEY) telah disetel di environment variables.'
       });
     }
 
-    return res.status(401).json({
-      ok: false,
-      message: 'Email atau kata sandi tidak sesuai.'
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
+      });
+
+      if (error) {
+        let msg = error.message;
+        if (msg.includes('Invalid login credentials')) {
+          msg = 'Email atau kata sandi tidak valid di Supabase Auth.';
+        } else if (msg.includes('Email not confirmed')) {
+          msg = 'Email belum dikonfirmasi di Supabase Auth. Silakan periksa kotak masuk email Anda.';
+        }
+        return res.status(401).json({ ok: false, message: msg });
+      }
+
+      if (data.session && data.user) {
+        return res.json({
+          ok: true,
+          token: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            role: data.user.role || 'authenticated'
+          }
+        });
+      }
+
+      return res.status(401).json({ ok: false, message: 'Gagal mendapatkan sesi login dari Supabase.' });
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, message: 'Terjadi kesalahan pada server autentikasi: ' + (err.message || err) });
+    }
+  });
+
+  // Supabase Auth Sign Up Endpoint
+  app.post('/api/auth/signup', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ ok: false, message: 'Email dan kata sandi wajib diisi.' });
+    }
+
+    const supabase = getSupabaseServerClient(false);
+    if (!supabase) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Supabase belum terkonfigurasi. Pastikan SUPABASE_URL dan SUPABASE_ANON_KEY (atau SUPABASE_SERVICE_ROLE_KEY) telah disetel di environment variables.'
+      });
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password
+      });
+
+      if (error) {
+        let msg = error.message;
+        if (msg.includes('User already registered')) {
+          msg = 'Email ini sudah terdaftar di Supabase Auth. Silakan masuk.';
+        } else if (msg.includes('Password should be at least')) {
+          msg = 'Kata sandi minimal 6 karakter.';
+        }
+        return res.status(400).json({ ok: false, message: msg });
+      }
+
+      const requiresEmailConfirmation = Boolean(data.user && !data.session);
+
+      return res.json({
+        ok: true,
+        token: data.session?.access_token || null,
+        user: data.user ? { id: data.user.id, email: data.user.email } : null,
+        requiresEmailConfirmation,
+        message: requiresEmailConfirmation
+          ? 'Pendaftaran akun berhasil! Silakan periksa inbox email Anda untuk konfirmasi sebelum masuk.'
+          : 'Pendaftaran berhasil dan Anda telah masuk.'
+      });
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, message: 'Terjadi kesalahan saat pendaftaran: ' + (err.message || err) });
+    }
+  });
+
+  // Supabase Auth Verify Token Endpoint
+  app.get('/api/auth/verify', async (req, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader?.replace(/^Bearer\s+/i, '');
+    if (!token) {
+      return res.status(401).json({ ok: false, message: 'Token tidak ditemukan.' });
+    }
+
+    const supabase = getSupabaseServerClient(false);
+    if (!supabase) {
+      return res.status(400).json({ ok: false, message: 'Supabase belum terkonfigurasi.' });
+    }
+
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (error || !user) {
+        return res.status(401).json({ ok: false, message: 'Sesi Supabase tidak valid atau sudah kedaluwarsa.' });
+      }
+
+      return res.json({
+        ok: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role || 'authenticated'
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, message: 'Gagal memverifikasi sesi Supabase.' });
+    }
   });
 
   // Get full portfolio data (Public Read)

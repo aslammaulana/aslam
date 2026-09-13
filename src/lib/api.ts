@@ -83,8 +83,65 @@ export function isAuthenticated(): boolean {
   return !!getAdminToken();
 }
 
+export async function checkSupabaseServerConfig(): Promise<{ configured: boolean; supabaseUrl: string | null; supabaseAnonKey: string | null }> {
+  try {
+    const res = await fetch('/api/config/supabase');
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        configured: Boolean(data.configured),
+        supabaseUrl: data.supabaseUrl || null,
+        supabaseAnonKey: data.supabaseAnonKey || null,
+      };
+    }
+  } catch (e) {
+    console.warn('Failed to fetch /api/config/supabase:', e);
+  }
+  return {
+    configured: isSupabaseConfigured(),
+    supabaseUrl: null,
+    supabaseAnonKey: null,
+  };
+}
+
 export async function loginAdmin(email: string, password: string): Promise<{ success: boolean; message?: string; user?: any }> {
-  // 1. Direct Supabase Authentication
+  try {
+    // 1. Try server-side Supabase authentication (SUPABASE_URL + SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY)
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password })
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.ok) {
+      if (data.token) {
+        setAdminToken(data.token);
+      }
+      if (data.user) {
+        setAdminUser({
+          email: data.user.email,
+          id: data.user.id
+        });
+      }
+      return {
+        success: true,
+        user: data.user
+      };
+    }
+
+    if (data.message) {
+      return {
+        success: false,
+        message: data.message
+      };
+    }
+  } catch (err) {
+    console.warn('Server auth endpoint failed, attempting direct client Supabase fallback:', err);
+  }
+
+  // 2. Fallback to direct client-side Supabase if configured
   if (isSupabaseConfigured()) {
     const supabaseRes = await signInWithSupabase(email, password);
     if (supabaseRes.success && supabaseRes.session) {
@@ -104,41 +161,102 @@ export async function loginAdmin(email: string, password: string): Promise<{ suc
     };
   }
 
-  // 2. If Supabase is not yet configured in env, notify clearly
   return {
     success: false,
-    message: 'Supabase Authentication belum terkonfigurasi. Harap masukkan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY di environment/settings.'
+    message: 'Supabase Authentication belum terkonfigurasi. Harap masukkan SUPABASE_URL dan SUPABASE_ANON_KEY (atau SUPABASE_SERVICE_ROLE_KEY) di Settings.'
   };
 }
 
 export async function registerAdmin(email: string, password: string): Promise<{ success: boolean; message?: string; requiresEmailConfirmation?: boolean }> {
-  if (!isSupabaseConfigured()) {
-    return {
-      success: false,
-      message: 'Supabase Authentication belum terkonfigurasi. Harap atur VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.'
-    };
+  try {
+    // 1. Try server-side Supabase sign up
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password })
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.ok) {
+      if (data.token) {
+        setAdminToken(data.token);
+      }
+      if (data.user) {
+        setAdminUser({
+          email: data.user.email,
+          id: data.user.id
+        });
+      }
+      return {
+        success: true,
+        requiresEmailConfirmation: data.requiresEmailConfirmation,
+        message: data.message
+      };
+    }
+
+    if (data.message) {
+      return {
+        success: false,
+        message: data.message
+      };
+    }
+  } catch (err) {
+    console.warn('Server sign up failed, attempting client fallback:', err);
   }
 
-  const res = await signUpWithSupabase(email, password);
-  if (res.success) {
-    if (res.session) {
-      setAdminToken(res.session.access_token);
-      setAdminUser({
-        email: res.user?.email,
-        id: res.user?.id
-      });
+  // 2. Direct client fallback
+  if (isSupabaseConfigured()) {
+    const res = await signUpWithSupabase(email, password);
+    if (res.success) {
+      if (res.session) {
+        setAdminToken(res.session.access_token);
+        setAdminUser({
+          email: res.user?.email,
+          id: res.user?.id
+        });
+      }
+      return {
+        success: true,
+        requiresEmailConfirmation: res.requiresEmailConfirmation,
+        message: res.message
+      };
     }
     return {
-      success: true,
-      requiresEmailConfirmation: res.requiresEmailConfirmation,
-      message: res.message
+      success: false,
+      message: res.message || 'Pendaftaran akun di Supabase gagal.'
     };
   }
 
   return {
     success: false,
-    message: res.message || 'Pendaftaran akun di Supabase gagal.'
+    message: 'Supabase Authentication belum terkonfigurasi. Harap atur SUPABASE_URL dan SUPABASE_ANON_KEY (atau SUPABASE_SERVICE_ROLE_KEY).'
   };
+}
+
+export async function verifyAdminSession(): Promise<boolean> {
+  const token = getAdminToken();
+  if (!token) return false;
+
+  try {
+    const res = await fetch('/api/auth/verify', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.ok && data.user) {
+        setAdminUser({
+          email: data.user.email,
+          id: data.user.id
+        });
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to verify session on server:', err);
+  }
+
+  return isAuthenticated();
 }
 
 // Update Profile

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   Mail,
@@ -8,11 +8,10 @@ import {
   UserPlus,
   LogIn,
   CheckCircle2,
-  HelpCircle,
   KeyRound,
   Sparkles
 } from 'lucide-react';
-import { loginAdmin, registerAdmin } from '../../lib/api.ts';
+import { loginAdmin, registerAdmin, checkSupabaseServerConfig } from '../../lib/api.ts';
 import { isSupabaseConfigured } from '../../lib/supabase.ts';
 
 interface AdminLoginProps {
@@ -26,22 +25,22 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onNaviga
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingConfig, setCheckingConfig] = useState(true);
+  const [supabaseReady, setSupabaseReady] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const supabaseReady = isSupabaseConfigured();
+  useEffect(() => {
+    checkSupabaseServerConfig().then((cfg) => {
+      setSupabaseReady(cfg.configured || isSupabaseConfigured());
+      setCheckingConfig(false);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
-
-    if (!supabaseReady) {
-      setErrorMsg(
-        'Supabase belum terkonfigurasi. Pastikan variabel VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY telah diisi di pengaturan environment.'
-      );
-      return;
-    }
 
     if (mode === 'signup') {
       if (password.length < 6) {
@@ -127,27 +126,28 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onNaviga
           </h1>
           <p className="mt-1.5 text-xs text-slate-500">
             {mode === 'signin'
-              ? 'Masuk menggunakan kredensial akun pengguna dari Supabase Auth.'
-              : 'Daftarkan user baru secara langsung ke proyek Supabase Auth Anda.'}
+              ? 'Masuk menggunakan akun pengguna dari Supabase Auth.'
+              : 'Daftarkan user baru secara langsung ke Supabase Auth Anda.'}
           </p>
         </div>
 
         {/* Supabase Status Check */}
-        {!supabaseReady && (
+        {!checkingConfig && !supabaseReady && (
           <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
             <div className="flex items-center gap-1.5 font-semibold text-amber-950">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
               <span>Konfigurasi Supabase Diperlukan</span>
             </div>
             <p className="text-amber-800 leading-relaxed">
-              Kredensial Supabase belum terdeteksi. Silakan atur variabel berikut di pengaturan Environment:
+              Kredensial Supabase belum terdeteksi. Silakan atur variabel environment berikut di panel <strong>Settings</strong>:
             </p>
-            <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200 font-mono text-[11px] space-y-1 text-slate-700">
-              <div>VITE_SUPABASE_URL=https://xyz.supabase.co</div>
-              <div>VITE_SUPABASE_ANON_KEY=eyJhbGciOi...</div>
+            <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 font-mono text-[11px] space-y-1 text-slate-700">
+              <div>SUPABASE_URL=https://xyz.supabase.co</div>
+              <div>SUPABASE_ANON_KEY=eyJhbGciOi...</div>
+              <div>SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...</div>
             </div>
             <p className="text-[11px] text-amber-700">
-              Dapatkan URL &amp; Anon Key di Supabase Dashboard &gt; Project Settings &gt; API.
+              Dapatkan kredensial ini di Supabase Dashboard &gt; Project Settings &gt; API.
             </p>
           </div>
         )}
